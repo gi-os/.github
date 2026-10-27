@@ -43,6 +43,13 @@ PRE_RELEASE, AUTO_RELEASE, THIRD_PARTY_CONTENT. Full table: `.gios/ios/README.md
 - An app's own `ci/<step>.sh` overrides the kit's step; app-only lanes go below the import in
   `fastlane/Fastfile`.
 
+**On Giovanni's Mac** (a Remote Control session: `xcodebuild` exists, `CLAUDE_CODE_REMOTE` isn't set),
+check a change locally before pushing, which is much faster than waiting on Check:
+`bash .gios/ios/ci/kit.sh generate && bash .gios/ios/ci/kit.sh test`, and for UI
+`bash .gios/ios/ci/kit.sh screenshots` (PNGs in /tmp/gios-shots: Read them). Skip `select-xcode`
+(it needs sudo; the Mac's own Xcode is fine). Then ship the usual way: PR, Check, merge, TestFlight.
+Clones of every app live in ~/Developer/gi-os (`mac/setup.sh` in gi-os/.github keeps them current).
+
 ## Code
 
 Match the surrounding style. Keep logic out of views so it's unit-testable; new tests use Swift
