@@ -24,22 +24,33 @@ if [ -z "$APP" ]; then
   done
 fi
 DEV=$(bash "$(dirname "${BASH_SOURCE[0]}")/sim.sh")
+echo "Simulator: $(xcrun simctl list devices | grep -m1 "$DEV" | sed 's/^ *//')"
 xcrun simctl boot "$DEV" >/dev/null 2>&1 || true
 xcrun simctl bootstatus "$DEV" -b >/dev/null
 xcrun simctl status_bar "$DEV" override --time 9:41 --batteryState charged --batteryLevel 100 \
   --cellularMode active --cellularBars 4 --wifiBars 3 >/dev/null 2>&1 || true
 xcrun simctl install "$DEV" "$APP"
 xcrun simctl privacy "$DEV" grant all "$BID" >/dev/null 2>&1 || true
-shot() { # name appearance [screen]
+shot() { # name appearance [screen]; a failed shot is a warning, not the end of the step
+  local args=() err
   xcrun simctl ui "$DEV" appearance "$2" >/dev/null 2>&1 || true
   xcrun simctl terminate "$DEV" "$BID" >/dev/null 2>&1 || true
-  if [ -n "${3:-}" ]; then xcrun simctl launch "$DEV" "$BID" -gios-screen "$3" >/dev/null
-  else xcrun simctl launch "$DEV" "$BID" >/dev/null; fi
+  [ -n "${3:-}" ] && args=(-gios-screen "$3")
+  if ! err=$(xcrun simctl launch "$DEV" "$BID" ${args[@]+"${args[@]}"} 2>&1); then
+    echo "::warning::Couldn't launch $BID for $1: $err"; return 0
+  fi
   sleep "${SHOT_DELAY:-5}"
-  xcrun simctl io "$DEV" screenshot --type=png "$OUT/$1.png" >/dev/null 2>&1 && echo "Took $1.png"
+  # A simulator with more than one screen (iPhone Duo) wants the screen named.
+  for display in "" internal; do
+    if err=$(xcrun simctl io "$DEV" screenshot ${display:+--display=$display} "$OUT/$1.png" 2>&1); then
+      echo "Took $1.png${display:+ ($display display)}"; return 0
+    fi
+  done
+  echo "::warning::Couldn't screenshot $1: $err"
 }
 shot 01-launch light
 shot 02-launch-dark dark
 n=3
 for s in ${SCREENS:-}; do shot "$(printf '%02d' "$n")-$s" light "$s"; n=$((n + 1)); done
 xcrun simctl ui "$DEV" appearance light >/dev/null 2>&1 || true
+ls "$OUT"/*.png >/dev/null 2>&1 || { echo "No screenshots taken"; exit 1; }
