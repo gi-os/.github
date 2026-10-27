@@ -43,12 +43,13 @@ PRE_RELEASE, AUTO_RELEASE, THIRD_PARTY_CONTENT. Full table: `.gios/ios/README.md
 - An app's own `ci/<step>.sh` overrides the kit's step; app-only lanes go below the import in
   `fastlane/Fastfile`.
 
-**On Giovanni's Mac** (a Remote Control session: `xcodebuild` exists, `CLAUDE_CODE_REMOTE` isn't set),
-check a change locally before pushing, which is much faster than waiting on Check:
-`bash .gios/ios/ci/kit.sh generate && bash .gios/ios/ci/kit.sh test`, and for UI
+**On Giovanni's Mac mini** (Remote Control from the phone: `xcodebuild` exists, `CLAUDE_CODE_REMOTE`
+isn't set): sessions start in ~/Developer/gi-os, which holds every app and the kit (`.github/`), so
+`cd` into the app first. Check a change locally before pushing, which is much faster than waiting on
+Check: `bash .gios/ios/ci/kit.sh generate && bash .gios/ios/ci/kit.sh test`, and for UI
 `bash .gios/ios/ci/kit.sh screenshots` (PNGs in /tmp/gios-shots: Read them). Skip `select-xcode`
 (it needs sudo; the Mac's own Xcode is fine). Then ship the usual way: PR, Check, merge, TestFlight.
-Clones of every app live in ~/Developer/gi-os (`mac/setup.sh` in gi-os/.github keeps them current).
+`.github/mac/setup.sh` adds new apps and refreshes the clones; run it after making an app.
 
 ## Code
 
