@@ -13,7 +13,7 @@ The kit is `ios/` in a gi-os/.github checkout, or `.gios/ios/` inside any app re
    - Display name (home screen) and a one-line description. Public unless the user says private.
 2. **Create the repo** through the secrets hub (this session's GitHub integration can't create
    repos): `add_repo` gi-os/ios-certs, then `mcp__github__actions_run_trigger` → `run_workflow`,
-   `owner: gi-os`, `repo: ios-certs`, `workflow_id: "new-repo.yml"`, `ref: "main"`,
+   `owner: gi-os`, `repo: ios-certs`, `workflow_id: "new-repo.yml"`, `ref: "master"`,
    `inputs: {"name": "<Scheme>", "description": "...", "private": "false"}`. When that run succeeds
    (it also copies in the secrets), attach the new repo with `add_repo` (`access: "push"`) and clone
    it as that tool says. If the run fails with "Add the HUB_TOKEN secret", the hub isn't set up yet:
