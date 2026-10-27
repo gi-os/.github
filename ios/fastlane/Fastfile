@@ -137,10 +137,14 @@ platform :ios do
     groups = env["EXTERNAL_GROUPS"].to_s.split(",").map(&:strip).reject(&:empty?)
     unless groups.empty?
       begin
+        # With no .ipa to read, pilot asks for the platform (fatal in CI) unless it's given;
+        # the version picks the build, which pilot waits on until it has processed.
         upload_to_testflight(
           api_key: api_key,
           distribute_only: true,
           app_identifier: ids.first,
+          app_platform: "ios",
+          app_version: marketing_version,
           build_number: number.to_s,
           distribute_external: true,
           groups: groups,
@@ -148,7 +152,7 @@ platform :ios do
           changelog: "A fresh build of #{env['APP_NAME']}."
         )
       rescue => e
-        UI.important("Uploaded, but couldn't send to #{groups.join(', ')} (create the group in TestFlight first?): #{e.message}")
+        UI.important("Uploaded, but couldn't send to #{groups.join(', ')}: #{e.message}")
       end
     end
   end
