@@ -24,22 +24,36 @@ if [ -z "$APP" ]; then
   done
 fi
 DEV=$(bash "$(dirname "${BASH_SOURCE[0]}")/sim.sh")
+echo "Simulator: $(xcrun simctl list devices | grep -m1 "$DEV" | sed 's/^ *//')"
 xcrun simctl boot "$DEV" >/dev/null 2>&1 || true
 xcrun simctl bootstatus "$DEV" -b >/dev/null
 xcrun simctl status_bar "$DEV" override --time 9:41 --batteryState charged --batteryLevel 100 \
   --cellularMode active --cellularBars 4 --wifiBars 3 >/dev/null 2>&1 || true
 xcrun simctl install "$DEV" "$APP"
 xcrun simctl privacy "$DEV" grant all "$BID" >/dev/null 2>&1 || true
-shot() { # name appearance [screen]
+shot() { # name appearance [screen]; a failed shot is a warning, not the end of the step
+  local args=() err
   xcrun simctl ui "$DEV" appearance "$2" >/dev/null 2>&1 || true
   xcrun simctl terminate "$DEV" "$BID" >/dev/null 2>&1 || true
-  if [ -n "${3:-}" ]; then xcrun simctl launch "$DEV" "$BID" -gios-screen "$3" >/dev/null
-  else xcrun simctl launch "$DEV" "$BID" >/dev/null; fi
+  [ -n "${3:-}" ] && args=(-gios-screen "$3")
+  if ! err=$(xcrun simctl launch "$DEV" "$BID" ${args[@]+"${args[@]}"} 2>&1); then
+    echo "::warning::Couldn't launch $BID for $1: $err"; return 0
+  fi
   sleep "${SHOT_DELAY:-5}"
-  xcrun simctl io "$DEV" screenshot --type=png "$OUT/$1.png" >/dev/null 2>&1 && echo "Took $1.png"
+  if err=$(xcrun simctl io "$DEV" screenshot "$OUT/$1.png" 2>&1); then echo "Took $1.png"; return 0; fi
+  # A simulator with more than one screen (iPhone Duo) refuses to pick one and lists them
+  # ("--display=3  LCD-1 (primary-1) 2007x2853"): take each, named by its size.
+  local took=0 id size
+  while read -r id size; do
+    if xcrun simctl io "$DEV" screenshot --display="$id" "$OUT/$1-$size.png" >/dev/null 2>&1; then
+      echo "Took $1-$size.png"; took=1
+    fi
+  done < <(printf '%s\n' "$err" | sed -nE 's/.*--display=([0-9]+) .* ([0-9]+x[0-9]+) *$/\1 \2/p')
+  [ "$took" = 1 ] || echo "::warning::Couldn't screenshot $1: $err"
 }
 shot 01-launch light
 shot 02-launch-dark dark
 n=3
 for s in ${SCREENS:-}; do shot "$(printf '%02d' "$n")-$s" light "$s"; n=$((n + 1)); done
 xcrun simctl ui "$DEV" appearance light >/dev/null 2>&1 || true
+ls "$OUT"/*.png >/dev/null 2>&1 || { echo "No screenshots taken"; exit 1; }

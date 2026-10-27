@@ -6,7 +6,6 @@ name: Kit check
 on:
   push:
     paths: ['ios/**', '.github/workflows/**', '.claude/**', '.shellcheckrc']
-  pull_request:
   workflow_dispatch:
 
 concurrency:
@@ -36,8 +35,13 @@ jobs:
             fi
           done
 
+  # Both images the apps build on: macos-15, and xcode-27 (Xcode 27.1, iPhone Duo).
   template:
-    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, xcode-27]
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     env:
       GIOS_KIT_REF: ${{ github.head_ref || github.ref_name }}
@@ -62,10 +66,10 @@ jobs:
         working-directory: app
         run: |
           bash .gios/ios/ci/kit.sh screenshots
-          ls /tmp/gios-shots/01-launch.png /tmp/gios-shots/02-launch-dark.png
+          ls /tmp/gios-shots/01-launch*.png /tmp/gios-shots/02-launch-dark*.png
       - uses: actions/upload-artifact@v4
         with:
-          name: screenshots
+          name: screenshots-${{ matrix.runner }}
           path: /tmp/gios-shots
           retention-days: 14
       - name: Compile for device (unsigned)
