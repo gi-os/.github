@@ -8,6 +8,7 @@
 # that restarts itself, so the phone can always start a session. (It asks for your password once.)
 # Before the first --always-on, run `claude remote-control` once in $ROOT and answer its question.
 set -euo pipefail
+trap 'echo "setup.sh stopped at line $LINENO (exit $?)" >&2' ERR
 ROOT="${GIOS_ROOT:-$HOME/Developer/gi-os}"
 KIT="$ROOT/.github"
 ALWAYS_ON=false
@@ -44,7 +45,9 @@ gh auth setup-git
 say "Repos in $ROOT"
 mkdir -p "$ROOT"
 apps=$(gh repo list gi-os --limit 1000 --no-archived --json name -q '.[].name' | while read -r r; do
-  gh api "repos/gi-os/$r/contents/ci/app.env" --silent >/dev/null 2>&1 && echo "$r"
+  # `if`, not `&&`: a repo without ci/app.env last in the list would end the loop with a failure
+  # and stop the script under set -e.
+  if gh api "repos/gi-os/$r/contents/ci/app.env" --silent >/dev/null 2>&1; then echo "$r"; fi
 done)
 for r in .github $apps; do
   if [ -d "$ROOT/$r/.git" ]; then
