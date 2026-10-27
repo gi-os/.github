@@ -40,13 +40,16 @@ shot() { # name appearance [screen]; a failed shot is a warning, not the end of 
     echo "::warning::Couldn't launch $BID for $1: $err"; return 0
   fi
   sleep "${SHOT_DELAY:-5}"
-  # A simulator with more than one screen (iPhone Duo) wants the screen named.
-  for display in "" internal; do
-    if err=$(xcrun simctl io "$DEV" screenshot ${display:+--display=$display} "$OUT/$1.png" 2>&1); then
-      echo "Took $1.png${display:+ ($display display)}"; return 0
+  if err=$(xcrun simctl io "$DEV" screenshot "$OUT/$1.png" 2>&1); then echo "Took $1.png"; return 0; fi
+  # A simulator with more than one screen (iPhone Duo) refuses to pick one and lists them
+  # ("--display=3  LCD-1 (primary-1) 2007x2853"): take each, named by its size.
+  local took=0 id size
+  while read -r id size; do
+    if xcrun simctl io "$DEV" screenshot --display="$id" "$OUT/$1-$size.png" >/dev/null 2>&1; then
+      echo "Took $1-$size.png"; took=1
     fi
-  done
-  echo "::warning::Couldn't screenshot $1: $err"
+  done < <(printf '%s\n' "$err" | sed -nE 's/.*--display=([0-9]+) .* ([0-9]+x[0-9]+) *$/\1 \2/p')
+  [ "$took" = 1 ] || echo "::warning::Couldn't screenshot $1: $err"
 }
 shot 01-launch light
 shot 02-launch-dark dark
