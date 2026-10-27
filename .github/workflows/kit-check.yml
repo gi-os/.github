@@ -5,7 +5,7 @@ name: Kit check
 # tests, unsigned device build, fastlane importing this branch's Fastfile).
 on:
   push:
-    paths: ['ios/**', '.github/workflows/**', '.claude/**', '.shellcheckrc']
+    paths: ['ios/**', 'mac/**', '.github/workflows/**', '.claude/**', '.shellcheckrc']
   workflow_dispatch:
 
 concurrency:
@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: shellcheck
-        run: shellcheck ios/*.sh ios/ci/*.sh ios/claude/*.sh ios/template/.claude/hooks/*.sh
+        run: shellcheck ios/*.sh ios/ci/*.sh ios/claude/*.sh ios/template/.claude/hooks/*.sh mac/*.sh
       - name: actionlint
         run: |
           bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
