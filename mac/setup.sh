@@ -15,15 +15,26 @@ ALWAYS_ON=false
 say() { printf '\n\033[1m%s\033[0m\n' "$*"; }
 
 say "Xcode"
-xcode-select -p >/dev/null 2>&1 || { echo "Install Xcode from the App Store, open it once, then run this again."; exit 1; }
+if ! xcodebuild -version >/dev/null 2>&1; then
+  # Often Xcode is there but the Mac still points at the Command Line Tools.
+  X=$(find /Applications -maxdepth 1 -name 'Xcode*.app' ! -iname '*beta*' 2>/dev/null | sort -V | tail -1)
+  if [ -n "$X" ]; then
+    echo "$X is installed but not selected. Run, then run this again:"
+    echo "  sudo xcode-select -s \"$X/Contents/Developer\" && sudo xcodebuild -license accept && xcodebuild -runFirstLaunch"
+  else
+    echo "Install Xcode from the App Store, open it once, then run this again."
+  fi
+  exit 1
+fi
 xcodebuild -version | head -1
+xcrun simctl list runtimes 2>/dev/null | grep -q iOS || echo "No iOS simulator yet: run  xcodebuild -downloadPlatform iOS"
 
 say "Tools"
 command -v brew >/dev/null || { echo "Install Homebrew first (https://brew.sh), then run this again."; exit 1; }
 for tool in gh xcodegen fastlane; do
   if command -v "$tool" >/dev/null; then echo "$tool ✓"; else brew install "$tool"; fi
 done
-command -v claude >/dev/null || { echo "Install Claude Code first (https://code.claude.com), sign in with 'claude', then run this again."; exit 1; }
+command -v claude >/dev/null || { echo "Install Claude Code (brew install --cask claude-code), sign in by running 'claude', then run this again."; exit 1; }
 echo "claude $(claude --version)"
 
 say "GitHub"
