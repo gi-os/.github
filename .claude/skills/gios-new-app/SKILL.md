@@ -26,8 +26,9 @@ The kit is `ios/` in a gi-os/.github checkout, or `.gios/ios/` inside any app re
    `<Scheme>/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon.png` if they gave you one (1024²,
    no alpha).
 5. **First push** goes to `main` (a new repo has nothing to protect); later work goes through PRs.
-   The TestFlight run registers the bundle ID and makes the signing profiles, then stops at
-   "App Store Connect has no app for ..." until the app record exists. Check must be green.
-6. **Tell Giovanni the one step only they can do**: App Store Connect → My Apps → + → New App,
-   bundle ID `com.gios.<scheme>`, name `<Display name>`. Then re-run the TestFlight workflow yourself
-   once they say it's done (`run_workflow`, `workflow_id: "build.yml"`).
+   The TestFlight run registers the bundle ID, makes the signing profiles and, when the hub has an
+   Apple ID session, creates the App Store Connect app (set `STORE_NAME` if the name is taken) and
+   uploads build 1. Check must be green.
+6. **Only if that run stops at "App Store Connect has no app for ..."**: tell Giovanni to create it
+   (App Store Connect → My Apps → + → New App, bundle ID `com.gios.<scheme>`), then re-run the
+   TestFlight workflow yourself once they say it's done (`run_workflow`, `workflow_id: "build.yml"`).

@@ -32,6 +32,7 @@ Plain `KEY="value"` lines (fastlane parses them too, so no quotes inside values)
 | Key | Used by | Meaning |
 |---|---|---|
 | `APP_NAME` | fastlane | Display name for registrations and messages |
+| `STORE_NAME` | ship | App Store Connect name for a new app when `APP_NAME` is taken |
 | `SCHEME` | all | Xcode scheme (= project name unless `PROJECT` is set) |
 | `TARGETS` | fastlane | `target:bundle.id,...` for everything that ships, app first |
 | `RUNNER` | workflows | macOS runner label (default `macos-15`; `xcode-27` for the iOS 27.1 SDK) |
@@ -60,7 +61,10 @@ An app's own `ci/<step>.sh` replaces the kit's step, for the rare app that needs
 
 `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8`, `MATCH_PASSWORD`, `MATCH_GIT_AUTH` (TestFlight).
 Optional: `REVIEW_FIRST_NAME`, `REVIEW_LAST_NAME`, `REVIEW_EMAIL`, `REVIEW_PHONE` (App Review contact),
-`CLAUDE_CODE_OAUTH_TOKEN` (`claude setup-token`; @claude on a Mac runner, plus the Claude GitHub app).
+`CLAUDE_CODE_OAUTH_TOKEN` (`claude setup-token`; @claude on a Mac runner, plus the Claude GitHub app),
+`FASTLANE_USER`, `FASTLANE_PASSWORD`, `FASTLANE_SESSION` (an Apple ID session from `fastlane spaceauth`:
+the API can't create App Store Connect apps, so with these `ship` creates a new app's record itself).
+All of them are set once in the secrets hub (gi-os/ios-certs, HUB.md), which copies them into every app.
 
 ## Changing the kit
 

@@ -98,9 +98,29 @@ platform :ios do
       force: ENV["MATCH_FORCE"] == "true"
     )
 
-    # The one thing the API cannot do is create the App Store Connect app record.
+    # The one thing the API cannot do is create the App Store Connect app record. With an Apple ID
+    # session in the secrets (FASTLANE_USER, FASTLANE_PASSWORD, FASTLANE_SESSION from
+    # `fastlane spaceauth`), produce creates it signed in as that Apple ID; otherwise it's a
+    # one-minute job by hand. STORE_NAME in ci/app.env names it when APP_NAME is taken.
     unless Spaceship::ConnectAPI::App.find(ids.first)
-      UI.user_error!("App Store Connect has no app for #{ids.first}. My Apps → + → New App → pick bundle ID #{ids.first}, name it #{env['APP_NAME']}, then re-run this workflow. Certificates are already made, so the re-run is quick.")
+      name = env["STORE_NAME"].to_s.empty? ? env["APP_NAME"] : env["STORE_NAME"]
+      if ENV["FASTLANE_SESSION"].to_s.empty? || ENV["FASTLANE_USER"].to_s.empty?
+        UI.user_error!("App Store Connect has no app for #{ids.first}. My Apps → + → New App → pick bundle ID #{ids.first}, name it #{name}, then re-run this workflow. Certificates are already made, so the re-run is quick. (Or add an Apple ID session to the secrets hub and this happens by itself: see HUB.md in gi-os/ios-certs.)")
+      end
+      begin
+        create_app_online(
+          username: ENV["FASTLANE_USER"],
+          app_identifier: ids.first,
+          app_name: name,
+          sku: ids.first,
+          platform: "ios",
+          language: "en-US",
+          skip_devcenter: true # registered above
+        )
+      rescue => e
+        UI.user_error!("Couldn't create the App Store Connect app for #{ids.first} as #{name}: #{e.message}\nIf the name is taken, set STORE_NAME in ci/app.env. If the Apple ID session expired, run `fastlane spaceauth -u #{ENV['FASTLANE_USER']}` and update FASTLANE_SESSION in the hub.")
+      end
+      UI.success("Created the App Store Connect app #{name} for #{ids.first}")
     end
 
     targets.each do |target, bid|
