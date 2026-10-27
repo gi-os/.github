@@ -23,4 +23,4 @@ grep -rlI -e __APP__ -e __BUNDLE__ -e __DISPLAY__ --exclude-dir=.git "$DEST" | w
   sed -i.bak -e "s/__APP__/$NAME/g" -e "s/__BUNDLE__/$BUNDLE/g" -e "s/__DISPLAY__/$(esc "$DISPLAY")/g" "$f"
   rm -f "$f.bak"
 done
-echo "$NAME ($BUNDLE) is ready in $DEST"
+echo "$NAME ($BUNDLE) is ready in $DEST (workflows assume the default branch is main)"
