@@ -1,0 +1,107 @@
+name: iOS TestFlight
+
+# Reusable. Tests, then signs with fastlane match and uploads to TestFlight, so every push to
+# main is a build on the phone. Without the signing secrets it still tests and compiles, and
+# says what is missing. The caller passes `secrets: inherit` and grants `actions: write`.
+# The build number is the caller's run number (+ BUILD_OFFSET in ci/app.env).
+on:
+  workflow_call:
+    inputs:
+      force-profiles:
+        description: Remake provisioning profiles (after adding a capability)
+        type: boolean
+        default: false
+      kit-ref:
+        description: Ref of gi-os/.github to take the shared scripts from
+        type: string
+        default: main
+
+jobs:
+  config:
+    runs-on: ubuntu-latest
+    outputs:
+      runner: ${{ steps.env.outputs.runner }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: ci/app.env
+          sparse-checkout-cone-mode: false
+      - id: env
+        run: |
+          source ci/app.env
+          echo "runner=${RUNNER:-macos-15}" >> "$GITHUB_OUTPUT"
+
+  ship:
+    needs: config
+    runs-on: ${{ needs.config.outputs.runner }}
+    timeout-minutes: 60
+    env:
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+      MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+      MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_AUTH }}
+      BUILD_NUMBER: ${{ github.run_number }}
+      MATCH_FORCE: ${{ inputs.force-profiles }}
+    steps:
+      # GitHub disables scheduled workflows after 60 days without a commit, which would
+      # silently stop the monthly rebuild. Re-enabling the caller on every run resets that clock.
+      - name: Keep the monthly schedule alive
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CALLER: ${{ github.workflow_ref }}
+        run: |
+          file=$(basename "${CALLER%@*}")
+          gh api -X PUT "repos/$GITHUB_REPOSITORY/actions/workflows/$file/enable" || true
+      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5
+        with:
+          repository: gi-os/.github
+          ref: ${{ inputs.kit-ref }}
+          path: .gios
+      - name: Select Xcode
+        run: bash .gios/ios/ci/kit.sh select-xcode
+      - name: Generate project
+        run: bash .gios/ios/ci/kit.sh generate
+      - name: Unit tests
+        timeout-minutes: 35
+        run: bash .gios/ios/ci/kit.sh test
+
+      - name: Signing secrets present?
+        id: sec
+        run: |
+          missing=""
+          for v in ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_P8 MATCH_PASSWORD MATCH_GIT_BASIC_AUTHORIZATION; do
+            [ -n "${!v}" ] || missing="$missing $v"
+          done
+          if [ -z "$missing" ]; then echo "ok=true" >> "$GITHUB_OUTPUT"
+          else echo "ok=false" >> "$GITHUB_OUTPUT"; echo "::warning::No TestFlight upload. Missing secrets:$missing"; fi
+
+      - uses: ruby/setup-ruby@v1
+        if: steps.sec.outputs.ok == 'true'
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+      - name: Ship to TestFlight
+        if: steps.sec.outputs.ok == 'true'
+        env:
+          GIOS_KIT_REF: ${{ inputs.kit-ref }}
+        run: bundle exec fastlane ship
+      - name: After shipping (POST_SHIP)
+        if: steps.sec.outputs.ok == 'true'
+        run: |
+          source ci/app.env
+          if [ -n "${POST_SHIP:-}" ]; then echo "+ $POST_SHIP"; bash -o pipefail -c "$POST_SHIP"; fi
+
+      - name: Compile for device (unsigned, no secrets)
+        if: steps.sec.outputs.ok != 'true'
+        run: bash .gios/ios/ci/kit.sh build-unsigned
+      - name: Keep the full xcodebuild logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-logs
+          path: |
+            /tmp/xc*.log
+            ~/Library/Logs/gym/*.log
+          if-no-files-found: ignore

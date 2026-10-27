@@ -1,0 +1,2 @@
+# ci/app.env lives in each app repo, not here.
+disable=SC1091

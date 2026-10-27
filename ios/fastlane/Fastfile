@@ -1,0 +1,276 @@
+# Shared by every gi-os iOS app. An app's own fastlane/Fastfile imports this with
+#   import_from_git(url: "https://github.com/gi-os/.github.git", branch: "main", path: "ios/fastlane/Fastfile")
+# and can add lanes of its own below that line. Per-app values live in the app's ci/app.env.
+#
+# This file is evaluated from a clone of gi-os/.github, so paths come from the app's git root
+# (app_root), never from __dir__.
+default_platform(:ios)
+
+def app_root
+  `git rev-parse --show-toplevel`.strip
+end
+
+def app_path(*parts)
+  File.join(app_root, *parts)
+end
+
+def app_env
+  Hash[File.read(app_path("ci", "app.env")).scan(/^(\w+)="?([^"\n]*)"?$/)]
+end
+
+def app_targets(env)
+  env["TARGETS"].split(",").map { |p| p.split(":") } # [[target, bundle id], ...]
+end
+
+def app_project(env)
+  app_path("#{env['PROJECT'] || env['SCHEME']}.xcodeproj")
+end
+
+def api_key_from_env
+  app_store_connect_api_key(key_id: ENV["ASC_KEY_ID"], issuer_id: ENV["ASC_ISSUER_ID"], key_content: ENV["ASC_KEY_P8"], in_house: false)
+end
+
+def marketing_version
+  File.read(app_path("project.yml"))[/MARKETING_VERSION:\s*"([^"]+)"/, 1]
+end
+
+# GitHub's run number, plus BUILD_OFFSET from ci/app.env: a renamed TestFlight workflow starts
+# counting from 1 again, and App Store Connect refuses a build number it has already seen.
+def next_build_number(env)
+  (ENV["BUILD_NUMBER"] || "1").to_i + env["BUILD_OFFSET"].to_i
+end
+
+platform :ios do
+  # Tests have already run in the workflow. Registers bundle IDs and capabilities, signs with
+  # match (certificates in gi-os/ios-certs), builds and uploads to TestFlight.
+  lane :ship do
+    env = app_env
+    scheme = env["SCHEME"]
+    project = app_project(env)
+    targets = app_targets(env)
+    ids = targets.map(&:last)
+    api_key = api_key_from_env
+
+    # Bundle IDs are registered here, so a new target needs no trip to the portal.
+    ids.each do |bid|
+      next if Spaceship::ConnectAPI::BundleId.find(bid)
+      Spaceship::ConnectAPI::BundleId.create(name: "#{env['APP_NAME']} #{bid.split('.').last}", identifier: bid, platform: "IOS")
+      UI.success("Registered bundle ID #{bid}")
+    end
+
+    # App Groups capability on every ID when the app uses one (the group itself is made,
+    # and assigned to the IDs, once by hand on developer.apple.com).
+    if env["APP_GROUP"].to_s != ""
+      ids.each do |bid|
+        begin
+          b = Spaceship::ConnectAPI::BundleId.find(bid)
+          has = b.get_capabilities.any? { |c| c.capability_type == "APP_GROUPS" }
+          b.create_capability("APP_GROUPS") unless has
+        rescue => e
+          UI.important("Couldn't turn on App Groups for #{bid}: #{e.message}")
+        end
+      end
+    end
+
+    # Push Notifications on PUSH_BUNDLE (alerts, Live Activity pushes).
+    if env["PUSH_BUNDLE"].to_s != ""
+      begin
+        b = Spaceship::ConnectAPI::BundleId.find(env["PUSH_BUNDLE"])
+        unless b.get_capabilities.any? { |c| c.capability_type == "PUSH_NOTIFICATIONS" }
+          b.create_capability("PUSH_NOTIFICATIONS")
+          UI.success("Turned on Push Notifications for #{env['PUSH_BUNDLE']}")
+          ENV["MATCH_FORCE"] = "true"   # the profile has to be remade to carry aps-environment
+        end
+      rescue => e
+        UI.important("Couldn't turn on Push Notifications: #{e.message}")
+      end
+    end
+
+    setup_ci
+    match(
+      type: "appstore",
+      app_identifier: ids,
+      git_url: "https://github.com/gi-os/ios-certs.git",
+      storage_mode: "git",
+      api_key: api_key,
+      readonly: false,
+      # Set when capabilities change (e.g. App Groups added) so profiles are made again.
+      force: ENV["MATCH_FORCE"] == "true"
+    )
+
+    # The one thing the API cannot do is create the App Store Connect app record.
+    unless Spaceship::ConnectAPI::App.find(ids.first)
+      UI.user_error!("App Store Connect has no app for #{ids.first}. My Apps → + → New App → pick bundle ID #{ids.first}, name it #{env['APP_NAME']}, then re-run this workflow. Certificates are already made, so the re-run is quick.")
+    end
+
+    targets.each do |target, bid|
+      update_code_signing_settings(
+        path: project,
+        use_automatic_signing: false,
+        targets: [target],
+        team_id: ENV["sigh_#{bid}_appstore_team-id"],
+        profile_name: ENV["sigh_#{bid}_appstore_profile-name"],
+        code_sign_identity: "Apple Distribution",
+        bundle_identifier: bid
+      )
+    end
+
+    number = next_build_number(env)
+    build_app(
+      project: project,
+      scheme: scheme,
+      configuration: "Release",
+      export_method: "app-store",
+      output_directory: app_path("build"),
+      clean: true,
+      xcargs: "CURRENT_PROJECT_VERSION=#{number}"
+    )
+
+    upload_to_testflight(
+      api_key: api_key,
+      skip_waiting_for_build_processing: true,
+      distribute_external: false
+    )
+
+    # Optional (EXTERNAL_GROUPS in ci/app.env): also hand the build to external TestFlight
+    # groups so testers outside the team get every build. Never fails the upload.
+    groups = env["EXTERNAL_GROUPS"].to_s.split(",").map(&:strip).reject(&:empty?)
+    unless groups.empty?
+      begin
+        upload_to_testflight(
+          api_key: api_key,
+          distribute_only: true,
+          app_identifier: ids.first,
+          build_number: number.to_s,
+          distribute_external: true,
+          groups: groups,
+          notify_external_testers: true,
+          changelog: "A fresh build of #{env['APP_NAME']}."
+        )
+      rescue => e
+        UI.important("Uploaded, but couldn't send to #{groups.join(', ')} (create the group in TestFlight first?): #{e.message}")
+      end
+    end
+  end
+
+  # Attach the newest processed TestFlight build to the version waiting in App Store
+  # Connect. That's what makes App Store Connect show the app's icon; nothing is submitted.
+  lane :attach do
+    env = app_env
+    api_key_from_env
+    bundle = app_targets(env).first.last
+    app = Spaceship::ConnectAPI::App.find(bundle)
+    UI.user_error!("No App Store Connect app for #{bundle}") unless app
+    version = app.get_edit_app_store_version(platform: Spaceship::ConnectAPI::Platform::IOS)
+    UI.user_error!("No version waiting in App Store Connect") unless version
+    builds = Spaceship::ConnectAPI::Build.all(app_id: app.id, sort: "-uploadedDate", limit: 20)
+    build = builds.find { |b| b.processing_state == "VALID" && b.app_version == version.version_string } ||
+            builds.find { |b| b.processing_state == "VALID" }
+    UI.user_error!("No processed build yet") unless build
+    if build.app_version != version.version_string
+      UI.important("Newest build is #{build.app_version}; renaming the waiting version #{version.version_string} to match")
+      version.update(attributes: { versionString: build.app_version })
+    end
+    version.select_build(build_id: build.id)
+    UI.success("Attached #{build.app_version} (#{build.version}) to the App Store version")
+  end
+
+  # App Store screenshots from the UI-test scheme SCREEN_SCHEME (fastlane snapshot), on the
+  # 6.9-inch size App Store Connect asks for.
+  lane :screenshots do
+    env = app_env
+    UI.user_error!("No SCREEN_SCHEME in ci/app.env") if env["SCREEN_SCHEME"].to_s.empty?
+    shots = app_path("fastlane", "screenshots")
+    capture_screenshots(
+      project: app_project(env),
+      scheme: env["SCREEN_SCHEME"],
+      devices: [screenshot_device],
+      languages: ["en-US"],
+      output_directory: shots,
+      clear_previous_screenshots: true,
+      override_status_bar: true,
+      skip_open_summary: true,
+      number_of_retries: 1,
+      stop_after_first_error: false
+    )
+    # A shot named *iap-review* is for App Review's in-app purchase pages, not the store.
+    Dir[File.join(shots, "**", "*iap-review*.png")].each do |f|
+      FileUtils.mv(f, app_path("fastlane", "iap_review.png"))
+    end
+    count = Dir[File.join(shots, "**", "*.png")].count
+    UI.user_error!("No screenshots were captured; not uploading an empty set.") if count.zero?
+    UI.success("#{count} screenshots captured")
+  end
+
+  # Store text (fastlane/metadata), screenshots (fastlane/screenshots) and review details for
+  # the version in project.yml. With SUBMIT=true it also sends the newest TestFlight build of
+  # that version to App Review, once the build has finished processing.
+  lane :release do
+    env = app_env
+    api_key = api_key_from_env
+    version = marketing_version
+    bundle = app_targets(env).first.last
+    shots = app_path("fastlane", "screenshots")
+    have_shots = !Dir[File.join(shots, "**", "*.{png,jpg,jpeg}")].empty?
+    submit = ENV["SUBMIT"] == "true"
+    UI.user_error!("No screenshots in fastlane/screenshots: App Review won't take the app without them.") if submit && !have_shots
+    # App Review contact: App Store Connect needs all four before it takes review notes.
+    # Set REVIEW_FIRST_NAME, REVIEW_LAST_NAME, REVIEW_EMAIL, REVIEW_PHONE as repo secrets,
+    # or fill them in once in App Store Connect and leave these unset.
+    review = nil
+    notes = app_path("fastlane", "review_notes.txt")
+    if %w[REVIEW_FIRST_NAME REVIEW_LAST_NAME REVIEW_EMAIL REVIEW_PHONE].all? { |k| !ENV[k].to_s.empty? }
+      review = {
+        first_name: ENV["REVIEW_FIRST_NAME"], last_name: ENV["REVIEW_LAST_NAME"],
+        email_address: ENV["REVIEW_EMAIL"], phone_number: ENV["REVIEW_PHONE"],
+        notes: File.exist?(notes) ? File.read(notes) : ""
+      }
+    else
+      UI.important("Review contact secrets not set: leaving App Review information as it is in App Store Connect.")
+    end
+    deliver(
+      api_key: api_key,
+      app_identifier: bundle,
+      app_version: version,
+      # Submitting: let deliver wait for the newest build of this version to finish processing.
+      build_number: submit ? "latest" : latest_testflight_build_number(api_key: api_key, app_identifier: bundle, version: version).to_s,
+      skip_binary_upload: true,
+      metadata_path: app_path("fastlane", "metadata"),
+      screenshots_path: shots,
+      skip_screenshots: !have_shots,
+      overwrite_screenshots: true,
+      force: true,
+      app_review_information: review,
+      submit_for_review: submit,
+      # AUTO_RELEASE="true" in ci/app.env: live as soon as App Review approves it.
+      automatic_release: env["AUTO_RELEASE"] == "true",
+      precheck_include_in_app_purchases: false,
+      run_precheck_before_submit: false,
+      submission_information: {
+        add_id_info_uses_idfa: false,
+        export_compliance_uses_encryption: false,
+        content_rights_contains_third_party_content: env["THIRD_PARTY_CONTENT"] == "true",
+        content_rights_has_rights: true
+      }
+    )
+    attach unless submit
+  end
+end
+
+# The biggest "Pro Max" simulator on the runner: the 6.9-inch size App Store Connect asks for.
+def screenshot_device
+  require "json"
+  devices = JSON.parse(`xcrun simctl list devices available -j`)["devices"]
+  best = nil
+  devices.each do |runtime, list|
+    v = runtime[/iOS-(\d+)-(\d+)/] ? [$1.to_i, $2.to_i] : nil
+    next unless v
+    list.each do |d|
+      next unless d["name"] =~ /Pro Max/
+      num = d["name"][/iPhone (\d+)/, 1].to_i
+      key = [num, v]
+      best = [key, d["name"]] if best.nil? || (key <=> best[0]) > 0
+    end
+  end
+  best ? best[1] : "iPhone 17 Pro Max"
+end
