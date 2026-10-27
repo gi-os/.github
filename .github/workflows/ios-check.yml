@@ -1,0 +1,55 @@
+name: iOS check
+
+# Reusable. Compiles and tests an iOS app without publishing anything: simulator tests, then an
+# unsigned Release build for a device. Everything per-app comes from the caller's ci/app.env
+# (see ios/README.md); an app's own ci/<step>.sh overrides the kit's for that step.
+on:
+  workflow_call:
+    inputs:
+      kit-ref:
+        description: Ref of gi-os/.github to take the shared scripts from
+        type: string
+        default: main
+
+jobs:
+  config:
+    runs-on: ubuntu-latest
+    outputs:
+      runner: ${{ steps.env.outputs.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: ci/app.env
+          sparse-checkout-cone-mode: false
+      - id: env
+        run: |
+          source ci/app.env
+          echo "runner=${RUNNER:-macos-15}" >> "$GITHUB_OUTPUT"
+
+  check:
+    needs: config
+    runs-on: ${{ needs.config.outputs.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: gi-os/.github
+          ref: ${{ inputs.kit-ref }}
+          path: .gios
+      - name: Select Xcode
+        run: bash .gios/ios/ci/kit.sh select-xcode
+      - name: Generate project
+        run: bash .gios/ios/ci/kit.sh generate
+      - name: Unit tests
+        timeout-minutes: 35
+        run: bash .gios/ios/ci/kit.sh test
+      - name: Compile for device (unsigned)
+        run: bash .gios/ios/ci/kit.sh build-unsigned
+      - name: Keep the full xcodebuild logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-logs
+          path: /tmp/xc*.log
+          if-no-files-found: ignore

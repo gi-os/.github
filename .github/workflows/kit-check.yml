@@ -1,0 +1,83 @@
+name: Kit check
+
+# Tests this repo's iOS kit: lints every script, workflow and the Fastfile, then makes an app from
+# ios/template with new-app.sh and runs the real pipeline steps on it on a Mac (generate, simulator
+# tests, unsigned device build, fastlane importing this branch's Fastfile).
+on:
+  push:
+    paths: ['ios/**', '.github/workflows/**', '.claude/**', '.shellcheckrc']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: kit-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: shellcheck ios/ci/*.sh ios/claude/*.sh ios/new-app.sh ios/template/.claude/hooks/*.sh
+      - name: actionlint
+        run: |
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
+          ./actionlint .github/workflows/*.yml ios/template/.github/workflows/*.yml
+      - name: Fastfile and JSON
+        run: |
+          for f in ios/fastlane/Fastfile ios/template/fastlane/Fastfile; do ruby -c "$f"; done
+          find ios .claude -name '*.json' -print0 | xargs -0 -n1 python3 -m json.tool > /dev/null
+      - name: Skills have frontmatter
+        run: |
+          for f in .claude/skills/*/SKILL.md; do
+            if ! head -1 "$f" | grep -qx -- '---' || ! grep -q '^description: ' "$f"; then
+              echo "::error file=$f::needs a --- frontmatter block with a description"; exit 1
+            fi
+          done
+
+  template:
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      GIOS_KIT_REF: ${{ github.head_ref || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: kit
+      - name: New app from the template
+        run: |
+          bash kit/ios/new-app.sh KitDemo "Kit Demo" app
+          cp -R kit app/.gios
+      - name: Select Xcode
+        working-directory: app
+        run: bash .gios/ios/ci/kit.sh select-xcode
+      - name: Generate project
+        working-directory: app
+        run: bash .gios/ios/ci/kit.sh generate
+      - name: Unit tests
+        working-directory: app
+        run: bash .gios/ios/ci/kit.sh test
+      - name: Compile for device (unsigned)
+        working-directory: app
+        run: bash .gios/ios/ci/kit.sh build-unsigned
+      - name: Session hook and guard
+        working-directory: app
+        run: |
+          out=$(CLAUDE_PROJECT_DIR=$PWD bash .claude/hooks/session-start.sh)
+          grep -q "house rules" <<< "$out"
+          ls .claude/skills/gios-fix-ci/SKILL.md
+          guard() { echo "{\"tool_input\":{\"file_path\":\"$PWD/$1\"}}" | CLAUDE_PROJECT_DIR=$PWD bash .gios/ios/claude/guard.sh; }
+          rc=0; guard KitDemo.xcodeproj/project.pbxproj || rc=$?
+          [ "$rc" -eq 2 ] || { echo "guard didn't block the .pbxproj edit"; exit 1; }
+          guard KitDemo/UI/ContentView.swift || { echo "guard blocked a Swift file"; exit 1; }
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+          working-directory: app
+      - name: Fastlane imports the shared lanes
+        working-directory: app
+        run: |
+          bundle exec fastlane lanes | tee /tmp/lanes.txt
+          for l in ship attach screenshots release; do grep -q "ios $l" /tmp/lanes.txt || { echo "missing lane $l"; exit 1; }; done

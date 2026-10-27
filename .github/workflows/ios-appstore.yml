@@ -1,0 +1,100 @@
+name: iOS App Store
+
+# Reusable, run by hand from the caller. lane "release": store text (fastlane/metadata),
+# screenshots and App Review details for the version in project.yml, then attaches the newest
+# TestFlight build of that version, or with submit sends it to App Review. lane "attach": only
+# attaches the build (that's what makes App Store Connect show the icon).
+# With SCREEN_SCHEME in ci/app.env, release takes the screenshots on a simulator first; with
+# PRE_RELEASE it runs that command before uploading (e.g. in-app purchases), never failing the run.
+on:
+  workflow_call:
+    inputs:
+      lane:
+        description: release or attach
+        type: string
+        default: release
+      submit:
+        description: Submit for review
+        type: boolean
+        default: false
+      kit-ref:
+        description: Ref of gi-os/.github to take the shared scripts from
+        type: string
+        default: main
+
+jobs:
+  config:
+    runs-on: ubuntu-latest
+    outputs:
+      runner: ${{ steps.env.outputs.runner }}
+      shots: ${{ steps.env.outputs.shots }}
+      pre: ${{ steps.env.outputs.pre }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: ci/app.env
+          sparse-checkout-cone-mode: false
+      - id: env
+        env:
+          LANE: ${{ inputs.lane }}
+        run: |
+          source ci/app.env
+          case "$LANE" in release|attach) ;; *) echo "::error::lane must be release or attach, not $LANE"; exit 1 ;; esac
+          if [ "$LANE" = release ] && [ -n "${SCREEN_SCHEME:-}" ]; then
+            echo "shots=true" >> "$GITHUB_OUTPUT"; echo "runner=${RUNNER:-macos-15}" >> "$GITHUB_OUTPUT"
+          else
+            echo "shots=false" >> "$GITHUB_OUTPUT"; echo "runner=ubuntu-latest" >> "$GITHUB_OUTPUT"
+          fi
+          [ "$LANE" = release ] && [ -n "${PRE_RELEASE:-}" ] && echo "pre=true" >> "$GITHUB_OUTPUT" || true
+
+  appstore:
+    needs: config
+    runs-on: ${{ needs.config.outputs.runner }}
+    timeout-minutes: 75
+    env:
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+      SUBMIT: ${{ inputs.submit }}
+      REVIEW_FIRST_NAME: ${{ secrets.REVIEW_FIRST_NAME }}
+      REVIEW_LAST_NAME: ${{ secrets.REVIEW_LAST_NAME }}
+      REVIEW_EMAIL: ${{ secrets.REVIEW_EMAIL }}
+      REVIEW_PHONE: ${{ secrets.REVIEW_PHONE }}
+      GIOS_KIT_REF: ${{ inputs.kit-ref }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: gi-os/.github
+          ref: ${{ inputs.kit-ref }}
+          path: .gios
+      - name: Select Xcode
+        if: needs.config.outputs.shots == 'true'
+        run: bash .gios/ios/ci/kit.sh select-xcode
+      - name: Generate project
+        if: needs.config.outputs.shots == 'true'
+        run: bash .gios/ios/ci/kit.sh generate
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+      - name: Screenshots
+        if: needs.config.outputs.shots == 'true'
+        run: bundle exec fastlane screenshots
+      - uses: actions/upload-artifact@v4
+        if: always() && needs.config.outputs.shots == 'true'
+        with:
+          name: screenshots
+          path: fastlane/screenshots
+          if-no-files-found: ignore
+      - name: Before release (PRE_RELEASE)
+        if: needs.config.outputs.pre == 'true'
+        continue-on-error: true
+        run: |
+          source ci/app.env
+          echo "+ $PRE_RELEASE"
+          bash -c "$PRE_RELEASE"
+      - name: App Store Connect (${{ inputs.lane }})
+        env:
+          LANE: ${{ inputs.lane }}
+        run: bundle exec fastlane "$LANE"

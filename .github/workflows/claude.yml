@@ -1,0 +1,61 @@
+name: Claude on a Mac
+
+# Reusable. Runs Claude Code on a macOS runner with Xcode selected and the project generated, so
+# when someone writes @claude on an issue or pull request, Claude can build and run the tests
+# for real, which a Linux cloud session can't. The caller decides which events and who may
+# trigger it, passes `secrets: inherit`, and needs the CLAUDE_CODE_OAUTH_TOKEN secret (from
+# `claude setup-token`) and the Claude GitHub app installed on the repo.
+on:
+  workflow_call:
+    inputs:
+      kit-ref:
+        description: Ref of gi-os/.github to take the shared scripts from
+        type: string
+        default: main
+
+jobs:
+  config:
+    runs-on: ubuntu-latest
+    outputs:
+      runner: ${{ steps.env.outputs.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: ci/app.env
+          sparse-checkout-cone-mode: false
+      - id: env
+        run: |
+          source ci/app.env
+          echo "runner=${RUNNER:-macos-15}" >> "$GITHUB_OUTPUT"
+
+  claude:
+    needs: config
+    runs-on: ${{ needs.config.outputs.runner }}
+    timeout-minutes: 60
+    steps:
+      - name: Token present?
+        env:
+          TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          [ -n "$TOKEN" ] || { echo "::error::Add the CLAUDE_CODE_OAUTH_TOKEN secret (run 'claude setup-token' on your computer)"; exit 1; }
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/checkout@v4
+        with:
+          repository: gi-os/.github
+          ref: ${{ inputs.kit-ref }}
+          path: .gios
+      - name: Select Xcode
+        run: bash .gios/ios/ci/kit.sh select-xcode
+      # A broken project.yml may be the very thing Claude was asked to fix.
+      - name: Generate project
+        continue-on-error: true
+        run: bash .gios/ios/ci/kit.sh generate
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          additional_permissions: |
+            actions: read
+          claude_args: |
+            --allowedTools "Bash(xcodebuild:*),Bash(xcrun:*),Bash(xcodegen:*),Bash(bash .gios/ios/ci/kit.sh:*),Bash(swift:*),Bash(git:*)"
