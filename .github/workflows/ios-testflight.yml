@@ -41,6 +41,10 @@ jobs:
       ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
       MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
       MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_AUTH }}
+      # Optional Apple ID session: lets `ship` create a new app's App Store Connect record.
+      FASTLANE_USER: ${{ secrets.FASTLANE_USER }}
+      FASTLANE_PASSWORD: ${{ secrets.FASTLANE_PASSWORD }}
+      FASTLANE_SESSION: ${{ secrets.FASTLANE_SESSION }}
       BUILD_NUMBER: ${{ github.run_number }}
       MATCH_FORCE: ${{ inputs.force-profiles }}
     steps:

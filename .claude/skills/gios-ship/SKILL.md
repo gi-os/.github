@@ -20,8 +20,11 @@ asked for. Build numbers are automatic: the TestFlight workflow's run number + `
      (gi-os/ios-certs, HUB.md) copies them in: `add_repo` ios-certs, run `sync-secrets.yml` (ref `master`) with
      `inputs: {"repo": "<App>"}`, then re-run TestFlight. If the hub itself lacks them, tell
      Giovanni which ones to add there.
-   - `App Store Connect has no app for X`: the user creates it once (My Apps → + → New App → bundle
-     ID X), then re-runs the workflow.
+   - `App Store Connect has no app for X`: the hub has no Apple ID session, so the record can't be
+     made automatically. Ask Giovanni either to create it (My Apps → + → New App → bundle ID X) or to
+     add FASTLANE_USER / FASTLANE_PASSWORD / FASTLANE_SESSION to the hub (HUB.md), then re-run.
+   - `Couldn't create the App Store Connect app`: name taken → set `STORE_NAME` in ci/app.env;
+     session expired → Giovanni runs `fastlane spaceauth -u <apple id>` and updates FASTLANE_SESSION.
    - After adding a capability (App Groups, Push, ...): run `build.yml` by hand with
      `force_profiles: true` (`mcp__github__actions_run_trigger`, `run_workflow`, `ref:` the default
      branch).
