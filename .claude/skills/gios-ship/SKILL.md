@@ -10,10 +10,11 @@ description: Ship a gi-os iOS app: bump the version, get a build onto TestFlight
 `MARKETING_VERSION` in project.yml is the version users see. Bump it (semver) when a release is
 asked for. Build numbers are automatic: the TestFlight workflow's run number + `BUILD_OFFSET`.
 
-## TestFlight: every push to main
+## TestFlight: every push to the default branch
 
 1. Work on a branch until **Check** is green (`gios-fix-ci`).
-2. Merge or push to `main` **only when the user asks**. That starts **TestFlight** (`build.yml`).
+2. Squash-merge the green PR (the house rules: every change ships unless the request says "PR only").
+   The push to the default branch starts **TestFlight** (`build.yml`).
 3. Watch that run (`mcp__github__actions_list` → `list_workflow_runs`, `resource_id: "build.yml"`).
    - `Missing secrets` warning: tested and compiled, but nothing was uploaded. The secrets hub
      (gi-os/ios-certs, HUB.md) copies them in: `add_repo` ios-certs, run `sync-secrets.yml` (ref `master`) with
@@ -22,7 +23,8 @@ asked for. Build numbers are automatic: the TestFlight workflow's run number + `
    - `App Store Connect has no app for X`: the user creates it once (My Apps → + → New App → bundle
      ID X), then re-runs the workflow.
    - After adding a capability (App Groups, Push, ...): run `build.yml` by hand with
-     `force_profiles: true` (`mcp__github__actions_run_trigger`, `run_workflow`, `ref: main`).
+     `force_profiles: true` (`mcp__github__actions_run_trigger`, `run_workflow`, `ref:` the default
+     branch).
    - `The bundle version must be higher`: raise `BUILD_OFFSET` in ci/app.env above the last build.
 
 ## App Store
@@ -32,7 +34,7 @@ release_notes, promotional_text, support_url, privacy_url), review notes in
 `fastlane/review_notes.txt`, screenshots in `fastlane/screenshots/en-US/` (or taken by the
 `SCREEN_SCHEME` UI tests). Then run **App Store** (`release.yml`) by hand:
 
-- `mcp__github__actions_run_trigger` → `run_workflow`, `workflow_id: "release.yml"`, `ref: "main"`,
+- `mcp__github__actions_run_trigger` → `run_workflow`, `workflow_id: "release.yml"`, `ref:` the default branch,
   `inputs: {"lane": "release", "submit": "false"}`. Use `"submit": "true"` only when the user says to
   submit for review. It needs screenshots, and the REVIEW_FIRST_NAME / REVIEW_LAST_NAME / REVIEW_EMAIL
   / REVIEW_PHONE secrets or that contact filled in once in App Store Connect.
