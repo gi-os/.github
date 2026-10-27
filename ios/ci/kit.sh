@@ -1,7 +1,7 @@
 #!/bin/bash
 # One step of the shared iOS pipeline, run from the app repo's root: the app's own ci/<step>.sh
 # when it has one (an override for an app that needs something different), otherwise the kit's.
-# Steps: select-xcode, generate, test, build-unsigned.
+# Steps: select-xcode, generate, test, screenshots, build-unsigned.
 set -euo pipefail
 step="$1"
 shift

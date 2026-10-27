@@ -12,9 +12,9 @@ repo root: `bash .gios/ios/ci/kit.sh generate && bash .gios/ios/ci/kit.sh test`.
 
 - `mcp__github__actions_list` → `list_workflow_runs`, `resource_id: "check.yml"` (or `build.yml` for
   TestFlight), filter `branch: <your branch>`. Take the newest run whose `head_sha` is your last commit.
-- Still running? Don't poll with sleep. If the branch has a PR, `subscribe_pr_activity` and end the
-  turn; CI results wake you. Otherwise schedule one check-in (`send_later`, ~15 min, a Check takes
-  10-20) if available, or tell the user it's running.
+- Still running? Don't poll with sleep. Work goes through a PR, so `subscribe_pr_activity` and end
+  the turn; CI results wake you. Without a PR, schedule one check-in (`send_later`, ~15 min, a Check
+  takes 10-20) if available.
 
 ## 2. Read the failure
 

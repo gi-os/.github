@@ -3,16 +3,19 @@
 #   PRE_TEST    run first, from the repo root (e.g. "swift test" for a local package)
 #   XCTEST      "false" when the scheme has no test target: builds for the simulator instead
 #   SKIP_TESTS  tests this runner can't run, space-separated (Target/Class/test)
+#   LOG_MATCH   extra pattern for the summary at the end (lines the app's tests print)
 # Builds for testing, then runs the tests. The whole xcodebuild logs are kept in /tmp; errors, the
 # two phases, slow-to-type-check code and results print as they happen, so a slow or stuck run
 # shows where it is.
 set -euo pipefail
 source ci/app.env
 PROJ="${PROJECT:-$SCHEME}.xcodeproj"
+# A known place for the build, so screenshots.sh can install the app the tests just built.
+DD=/tmp/gios-dd
 
 if [ -n "${PRE_TEST:-}" ]; then
   echo "+ $PRE_TEST"
-  bash -c "$PRE_TEST"
+  bash -o pipefail -c "$PRE_TEST"
 fi
 
 DEV=$(bash "$(dirname "${BASH_SOURCE[0]}")/sim.sh")
@@ -22,7 +25,7 @@ SLOW='$(inherited) -Xfrontend -warn-long-expression-type-checking=400 -Xfrontend
 if [ "${XCTEST:-true}" = "false" ]; then
   echo "Building for simulator $DEV (XCTEST=false: no tests to run)"
   set +e
-  xcodebuild build -project "$PROJ" -scheme "$SCHEME" -destination "id=$DEV" \
+  xcodebuild build -project "$PROJ" -scheme "$SCHEME" -destination "id=$DEV" -derivedDataPath "$DD" \
     CODE_SIGNING_ALLOWED=NO OTHER_SWIFT_FLAGS="$SLOW" 2>&1 | tee /tmp/xcbuild.log | grep -E "error:|type-check|\*\* BUILD" | tail -120
   exit "${PIPESTATUS[0]}"
 fi
@@ -33,7 +36,7 @@ LIVE='error:|type-check|\*\* (BUILD|TEST|TEST BUILD) (SUCCEEDED|FAILED)|Test Sui
 DONE="Test Suite '(All|Selected) tests' (passed|failed)|Test run with [0-9]+ tests? .*(passed|failed)"
 set +e
 SECONDS=0
-xcodebuild build-for-testing -project "$PROJ" -scheme "$SCHEME" -destination "id=$DEV" \
+xcodebuild build-for-testing -project "$PROJ" -scheme "$SCHEME" -destination "id=$DEV" -derivedDataPath "$DD" \
   CODE_SIGNING_ALLOWED=NO OTHER_SWIFT_FLAGS="$SLOW" 2>&1 | tee /tmp/xcbuild.log | grep --line-buffered -E "$LIVE"
 status=${PIPESTATUS[0]}
 echo "Built for testing in ${SECONDS}s (status $status)"
@@ -47,7 +50,7 @@ if [ "$status" -eq 0 ]; then
   SECONDS=0
   : > /tmp/xctest.log
   rm -f /tmp/xctest.status
-  ( xcodebuild test-without-building -project "$PROJ" -scheme "$SCHEME" -destination "id=$DEV" \
+  ( xcodebuild test-without-building -project "$PROJ" -scheme "$SCHEME" -destination "id=$DEV" -derivedDataPath "$DD" \
       CODE_SIGNING_ALLOWED=NO -test-timeouts-enabled YES -default-test-execution-time-allowance 120 \
       ${SKIP[@]+"${SKIP[@]}"} > /tmp/xctest.log 2>&1
     echo $? > /tmp/xctest.status ) &
@@ -83,6 +86,6 @@ if [ "$status" -eq 0 ]; then
 fi
 set -e
 cat /tmp/xcbuild.log /tmp/xctest.log 2>/dev/null \
-  | grep -E "error:|: warning: .*XCT|Test Case .*(failed|passed)|Executed [0-9]+ test|\*\* TEST|✘|Test run with" \
+  | grep -E "${LOG_MATCH:+$LOG_MATCH|}error:|: warning: .*XCT|Test Case .*(failed|passed)|Executed [0-9]+ test|\*\* TEST|✘|Test run with" \
   | tail -250 || true
 exit "$status"

@@ -87,6 +87,11 @@ jobs:
         env:
           GIOS_KIT_REF: ${{ inputs.kit-ref }}
         run: bundle exec fastlane ship
+      - name: After shipping (POST_SHIP)
+        if: steps.sec.outputs.ok == 'true'
+        run: |
+          source ci/app.env
+          if [ -n "${POST_SHIP:-}" ]; then echo "+ $POST_SHIP"; bash -o pipefail -c "$POST_SHIP"; fi
 
       - name: Compile for device (unsigned, no secrets)
         if: steps.sec.outputs.ok != 'true'

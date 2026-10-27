@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: shellcheck
-        run: shellcheck ios/ci/*.sh ios/claude/*.sh ios/new-app.sh ios/template/.claude/hooks/*.sh
+        run: shellcheck ios/*.sh ios/ci/*.sh ios/claude/*.sh ios/template/.claude/hooks/*.sh
       - name: actionlint
         run: |
           bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
@@ -58,6 +58,16 @@ jobs:
       - name: Unit tests
         working-directory: app
         run: bash .gios/ios/ci/kit.sh test
+      - name: Screenshots
+        working-directory: app
+        run: |
+          bash .gios/ios/ci/kit.sh screenshots
+          ls /tmp/gios-shots/01-launch.png /tmp/gios-shots/02-launch-dark.png
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: /tmp/gios-shots
+          retention-days: 14
       - name: Compile for device (unsigned)
         working-directory: app
         run: bash .gios/ios/ci/kit.sh build-unsigned

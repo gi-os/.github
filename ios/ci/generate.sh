@@ -5,7 +5,7 @@ set -euo pipefail
 source ci/app.env
 if [ -n "${PREPARE:-}" ]; then
   echo "+ $PREPARE"
-  bash -c "$PREPARE"
+  bash -o pipefail -c "$PREPARE"
 fi
 command -v xcodegen >/dev/null || brew install xcodegen >/dev/null
 xcodegen generate

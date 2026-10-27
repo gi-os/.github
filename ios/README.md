@@ -5,7 +5,7 @@ One copy of the pipeline every gi-os iOS app uses, instead of a drifting copy in
 | Piece | Where | What |
 |---|---|---|
 | Reusable workflows | `.github/workflows/ios-*.yml`, `claude.yml` | Check, TestFlight, App Store, Claude on a Mac |
-| CI steps | `ios/ci/` | `kit.sh <step>`: select-xcode, generate, test, build-unsigned |
+| CI steps | `ios/ci/` | `kit.sh <step>`: select-xcode, generate, test, screenshots, build-unsigned |
 | Fastlane lanes | `ios/fastlane/Fastfile` | ship, attach, screenshots, release (imported by each app) |
 | New app | `ios/new-app.sh`, `ios/template/` | SwiftUI + XcodeGen + Swift Testing + all of the above |
 | Claude Code | `ios/claude/`, `.claude/skills/gios-*` | House rules, an edit guard, and skills, loaded by each app's session hook |
@@ -22,7 +22,8 @@ CLAUDE.md                   # what this app is
 ```
 
 Start one: `bash ios/new-app.sh BasilCam "Basil Cam"`, or ask Claude (`gios-new-app`).
-Move an older app over: ask Claude to adopt it (`gios-adopt`).
+Move an older app over: `bash ios/adopt.sh <app dir>` does the mechanical part; ask Claude to adopt
+it (`gios-adopt`) for the rest.
 
 ## ci/app.env
 
@@ -39,10 +40,14 @@ Plain `KEY="value"` lines (fastlane parses them too, so no quotes inside values)
 | `PRE_TEST` | test | Command before the simulator tests (e.g. `swift test`) |
 | `XCTEST` | test | `false`: scheme has no tests, build for the simulator instead |
 | `SKIP_TESTS` | test | `Target/Class/test` ids the runner can't run, space-separated |
+| `LOG_MATCH` | test | Extra pattern for the end-of-run summary (lines the app's tests print) |
+| `SCREENS` | screenshots | Screen names, space-separated: each is a launch with `-gios-screen <name>` |
+| `SHOT_DELAY` | screenshots | Seconds to wait after launch before a screenshot (default 5) |
 | `APP_GROUP` | ship | Turn on App Groups for every bundle ID |
 | `PUSH_BUNDLE` | ship | Turn on Push Notifications for this bundle ID |
 | `EXTERNAL_GROUPS` | ship | TestFlight groups that get every build, comma-separated |
 | `BUILD_OFFSET` | ship | Added to the run number (after renaming build.yml) |
+| `POST_SHIP` | TestFlight | Command after a successful upload (e.g. check the .ipa in `build/`) |
 | `SCREEN_SCHEME` | release | UI-test scheme that takes App Store screenshots |
 | `PRE_RELEASE` | release | Command before the upload (e.g. in-app purchases); never fails the run |
 | `AUTO_RELEASE` | release | `true`: goes live as soon as App Review approves |

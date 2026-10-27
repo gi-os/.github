@@ -15,9 +15,10 @@ asked for. Build numbers are automatic: the TestFlight workflow's run number + `
 1. Work on a branch until **Check** is green (`gios-fix-ci`).
 2. Merge or push to `main` **only when the user asks**. That starts **TestFlight** (`build.yml`).
 3. Watch that run (`mcp__github__actions_list` → `list_workflow_runs`, `resource_id: "build.yml"`).
-   - `Missing secrets` warning: tested and compiled, but nothing was uploaded. Repo secrets needed:
-     ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8, MATCH_PASSWORD, MATCH_GIT_AUTH (gi-os is a personal
-     account, so they're set per repo: Settings → Secrets and variables → Actions).
+   - `Missing secrets` warning: tested and compiled, but nothing was uploaded. The secrets hub
+     (gi-os/ios-certs, HUB.md) copies them in: `add_repo` ios-certs, run `sync-secrets.yml` with
+     `inputs: {"repo": "<App>"}`, then re-run TestFlight. If the hub itself lacks them, tell
+     Giovanni which ones to add there.
    - `App Store Connect has no app for X`: the user creates it once (My Apps → + → New App → bundle
      ID X), then re-runs the workflow.
    - After adding a capability (App Groups, Push, ...): run `build.yml` by hand with

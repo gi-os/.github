@@ -93,7 +93,7 @@ jobs:
         run: |
           source ci/app.env
           echo "+ $PRE_RELEASE"
-          bash -c "$PRE_RELEASE"
+          bash -o pipefail -c "$PRE_RELEASE"
       - name: App Store Connect (${{ inputs.lane }})
         env:
           LANE: ${{ inputs.lane }}

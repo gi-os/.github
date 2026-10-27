@@ -10,7 +10,9 @@ the app repo. The goal is the template's shape with every app-specific behaviour
 
 1. **Inventory** `ci/`, `fastlane/Fastfile`, `.github/workflows/`, `.gitignore`. Diff each ci script and
    the Fastfile against the kit's (`ios/ci/`, `ios/fastlane/Fastfile`) and list what this app does that
-   the kit doesn't.
+   the kit doesn't. Then run `bash <kit>/ios/adopt.sh <app dir>` for the mechanical part (callers,
+   Fastfile import, Claude hook, .gitignore, removing the kit's scripts) and work from `git diff`:
+   restore anything app-specific it replaced.
 2. **Move knobs into `ci/app.env`** (keys in `ios/README.md`):
    - `runs-on:` → `RUNNER`; workflow `XCODE_VERSION` / `XCODE` → `XCODE`; `SKIP_TESTS` → `SKIP_TESTS`.
    - Steps before `xcodegen` (fetching assets) → `PREPARE`. Extra test commands (`swift test`, sims)
@@ -29,6 +31,6 @@ the app repo. The goal is the template's shape with every app-specific behaviour
 6. **Claude**: copy `ios/template/.claude/` (settings.json, hooks/session-start.sh) and write a short
    CLAUDE.md like the template's with what this app is. Add the template's `.gitignore` lines for
    `.gios/` and `.claude/skills/gios-*/`.
-7. **Verify**: push the branch; **Check** must be green (`gios-fix-ci`). The TestFlight path is only
-   proven on `main`. Tell the user it's ready to merge, and after they merge, watch the TestFlight run
-   and confirm the build number continued.
+7. **Verify**: push the branch, open a PR; **Check** must be green (`gios-fix-ci`) and its screenshots
+   should show the app's launch screen. Squash-merge, then watch the TestFlight run on main: it must
+   upload, with the build number continuing from the last one.
