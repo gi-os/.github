@@ -30,7 +30,7 @@ jobs:
       shots: ${{ steps.env.outputs.shots }}
       pre: ${{ steps.env.outputs.pre }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           sparse-checkout: ci/app.env
           sparse-checkout-cone-mode: false
@@ -45,7 +45,7 @@ jobs:
           else
             echo "shots=false" >> "$GITHUB_OUTPUT"; echo "runner=ubuntu-latest" >> "$GITHUB_OUTPUT"
           fi
-          [ "$LANE" = release ] && [ -n "${PRE_RELEASE:-}" ] && echo "pre=true" >> "$GITHUB_OUTPUT" || true
+          if [ "$LANE" = release ] && [ -n "${PRE_RELEASE:-}" ]; then echo "pre=true" >> "$GITHUB_OUTPUT"; fi
 
   appstore:
     needs: config
@@ -62,8 +62,8 @@ jobs:
       REVIEW_PHONE: ${{ secrets.REVIEW_PHONE }}
       GIOS_KIT_REF: ${{ inputs.kit-ref }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5
         with:
           repository: gi-os/.github
           ref: ${{ inputs.kit-ref }}

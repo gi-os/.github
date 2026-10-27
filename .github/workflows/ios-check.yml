@@ -17,7 +17,7 @@ jobs:
     outputs:
       runner: ${{ steps.env.outputs.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           sparse-checkout: ci/app.env
           sparse-checkout-cone-mode: false
@@ -31,8 +31,8 @@ jobs:
     runs-on: ${{ needs.config.outputs.runner }}
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5
         with:
           repository: gi-os/.github
           ref: ${{ inputs.kit-ref }}

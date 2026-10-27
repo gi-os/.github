@@ -17,7 +17,7 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: shellcheck
         run: shellcheck ios/ci/*.sh ios/claude/*.sh ios/new-app.sh ios/template/.claude/hooks/*.sh
       - name: actionlint
@@ -42,7 +42,7 @@ jobs:
     env:
       GIOS_KIT_REF: ${{ github.head_ref || github.ref_name }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           path: kit
       - name: New app from the template
