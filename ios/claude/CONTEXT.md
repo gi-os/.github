@@ -31,7 +31,7 @@ picked up automatically; don't register it anywhere.
 
 Per-app pipeline knobs live in `ci/app.env` (plain `KEY="value"` lines, no secrets): APP_NAME, STORE_NAME, SCHEME,
 TARGETS (`target:bundle.id,...`, app first), RUNNER, XCODE, PREPARE, PRE_TEST, XCTEST, SKIP_TESTS,
-LOG_MATCH, SCREENS, APP_GROUP, PUSH_BUNDLE, EXTERNAL_GROUPS, BUILD_OFFSET, POST_SHIP, SCREEN_SCHEME,
+LOG_MATCH, SCREENS, APP_GROUP, PUSH_BUNDLE, ICLOUD, EXTERNAL_GROUPS, BUILD_OFFSET, POST_SHIP, SCREEN_SCHEME,
 PRE_RELEASE, AUTO_RELEASE, THIRD_PARTY_CONTENT. Full table: `.gios/ios/README.md`.
 
 ## The pipeline (reusable workflows in gi-os/.github; scripts in `.gios/ios/ci/`)

@@ -86,6 +86,21 @@ platform :ios do
       end
     end
 
+    # iCloud on the app's bundle ID (key-value storage works with no container; CloudKit or
+    # iCloud Drive containers are made, and assigned to the ID, once by hand on developer.apple.com).
+    if env["ICLOUD"].to_s == "true"
+      begin
+        b = Spaceship::ConnectAPI::BundleId.find(ids.first)
+        unless b.get_capabilities.any? { |c| c.capability_type == "ICLOUD" }
+          b.create_capability("ICLOUD", settings: [{ key: "ICLOUD_VERSION", options: [{ key: "XCODE_6" }] }])
+          UI.success("Turned on iCloud for #{ids.first}")
+          ENV["MATCH_FORCE"] = "true"   # the profile has to be remade to carry the iCloud entitlements
+        end
+      rescue => e
+        UI.important("Couldn't turn on iCloud: #{e.message}")
+      end
+    end
+
     setup_ci
     match(
       type: "appstore",

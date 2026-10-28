@@ -46,6 +46,7 @@ Plain `KEY="value"` lines (fastlane parses them too, so no quotes inside values)
 | `SHOT_DELAY` | screenshots | Seconds to wait after launch before a screenshot (default 5) |
 | `APP_GROUP` | ship | Turn on App Groups for every bundle ID |
 | `PUSH_BUNDLE` | ship | Turn on Push Notifications for this bundle ID |
+| `ICLOUD` | ship | `"true"` turns on iCloud for the app's bundle ID (key-value store; containers by hand) |
 | `EXTERNAL_GROUPS` | ship | TestFlight groups that get every build, comma-separated |
 | `BUILD_OFFSET` | ship | Added to the run number (after renaming build.yml) |
 | `POST_SHIP` | TestFlight | Command after a successful upload (e.g. check the .ipa in `build/`) |
