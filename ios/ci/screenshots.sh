@@ -1,33 +1,29 @@
 #!/bin/bash
-# Screenshots of the app, so UI work can be checked without a Mac: the launch screen in light and
-# dark, then one per name in SCREENS (ci/app.env), each launched with `-gios-screen <name>`
-# (UserDefaults key "gios-screen") for the app to route to. Uses the simulator build the tests
-# left in /tmp/gios-dd, or builds one (Check runs this in its own job, alongside the tests). PNGs
-# go to /tmp/gios-shots, which the Check workflow uploads as the "screenshots" artifact.
+# Screenshots of the app the tests just built, so UI work can be checked without a Mac: the
+# launch screen in light and dark, then one per name in SCREENS (ci/app.env), each launched
+# with `-gios-screen <name>` (UserDefaults key "gios-screen") for the app to route to. PNGs go
+# to /tmp/gios-shots, which the Check workflow uploads as the "screenshots" artifact.
 set -euo pipefail
 source ci/app.env
 OUT=/tmp/gios-shots
 DD=/tmp/gios-dd
 rm -rf "$OUT" && mkdir -p "$OUT"
 BID="${TARGETS%%,*}"; BID="${BID#*:}"
-DEV=$(bash "$(dirname "${BASH_SOURCE[0]}")/sim.sh")
-# Boots while the app builds (a fresh runner takes up to three minutes); waited for below.
-xcrun simctl bootstatus "$DEV" -b >/dev/null 2>&1 &
-built_app() {
-  for a in "$DD"/Build/Products/*-iphonesimulator/*.app; do
-    [ -d "$a" ] || continue
-    [ "$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$a/Info.plist" 2>/dev/null)" = "$BID" ] && echo "$a" && return
-  done
-  return 0
-}
-APP=$(built_app)
+APP=""
+for a in "$DD"/Build/Products/*-iphonesimulator/*.app; do
+  [ -d "$a" ] || continue
+  [ "$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$a/Info.plist" 2>/dev/null)" = "$BID" ] && APP="$a" && break
+done
 if [ -z "$APP" ]; then
   echo "No simulator build of $BID in $DD; building one"
+  DEV=$(bash "$(dirname "${BASH_SOURCE[0]}")/sim.sh")
   xcodebuild build -project "${PROJECT:-$SCHEME}.xcodeproj" -scheme "$SCHEME" -destination "id=$DEV" \
     -derivedDataPath "$DD" CODE_SIGNING_ALLOWED=NO -quiet 2>&1 | tail -40
-  APP=$(built_app)
-  [ -n "$APP" ] || { echo "The build made no app with bundle ID $BID"; exit 1; }
+  for a in "$DD"/Build/Products/*-iphonesimulator/*.app; do
+    case "$a" in *-Runner.app) ;; *) APP="$a"; break ;; esac
+  done
 fi
+DEV=$(bash "$(dirname "${BASH_SOURCE[0]}")/sim.sh")
 echo "Simulator: $(xcrun simctl list devices | grep -m1 "$DEV" | sed 's/^ *//')"
 xcrun simctl boot "$DEV" >/dev/null 2>&1 || true
 xcrun simctl bootstatus "$DEV" -b >/dev/null

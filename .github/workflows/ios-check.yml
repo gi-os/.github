@@ -1,8 +1,7 @@
 name: iOS check
 
-# Reusable. Compiles and tests an iOS app without publishing anything, in two jobs that run at
-# once: simulator tests, and screenshots of the app (the "screenshots" artifact) plus an unsigned
-# Release build for a device. Check takes as long as the slower of the two.
+# Reusable. Compiles and tests an iOS app without publishing anything: simulator tests, then an
+# unsigned Release build for a device, plus screenshots of the app (the "screenshots" artifact).
 # Everything per-app comes from the caller's ci/app.env
 # (see ios/README.md); an app's own ci/<step>.sh overrides the kit's for that step.
 on:
@@ -28,7 +27,7 @@ jobs:
           source ci/app.env
           echo "runner=${RUNNER:-macos-15}" >> "$GITHUB_OUTPUT"
 
-  test:
+  check:
     needs: config
     runs-on: ${{ needs.config.outputs.runner }}
     timeout-minutes: 45
@@ -46,32 +45,9 @@ jobs:
       - name: Unit tests
         timeout-minutes: 35
         run: bash .gios/ios/ci/kit.sh test
-      - name: Keep the full xcodebuild logs
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: xcodebuild-logs-test
-          path: /tmp/xc*.log
-          if-no-files-found: ignore
-
-  build:
-    needs: config
-    runs-on: ${{ needs.config.outputs.runner }}
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/checkout@v5
-        with:
-          repository: gi-os/.github
-          ref: ${{ inputs.kit-ref }}
-          path: .gios
-      - name: Select Xcode
-        run: bash .gios/ios/ci/kit.sh select-xcode
-      - name: Generate project
-        run: bash .gios/ios/ci/kit.sh generate
       # So UI work can be looked at from anywhere (the "screenshots" artifact). Never fails Check.
       - name: Screenshots
-        timeout-minutes: 15
+        timeout-minutes: 10
         continue-on-error: true
         run: bash .gios/ios/ci/kit.sh screenshots
       - uses: actions/upload-artifact@v4
@@ -87,6 +63,6 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: xcodebuild-logs-build
+          name: xcodebuild-logs
           path: /tmp/xc*.log
           if-no-files-found: ignore
