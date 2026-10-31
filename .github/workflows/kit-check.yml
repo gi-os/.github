@@ -59,9 +59,7 @@ jobs:
       - name: Generate project
         working-directory: app
         run: bash .gios/ios/ci/kit.sh generate
-      - name: Unit tests
-        working-directory: app
-        run: bash .gios/ios/ci/kit.sh test
+      # Before the tests, as in Check's build job: no simulator build yet, so it makes its own.
       - name: Screenshots
         working-directory: app
         run: |
@@ -72,6 +70,9 @@ jobs:
           name: screenshots-${{ matrix.runner }}
           path: /tmp/gios-shots
           retention-days: 14
+      - name: Unit tests
+        working-directory: app
+        run: bash .gios/ios/ci/kit.sh test
       - name: Compile for device (unsigned)
         working-directory: app
         run: bash .gios/ios/ci/kit.sh build-unsigned

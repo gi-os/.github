@@ -13,12 +13,16 @@ PROJ="${PROJECT:-$SCHEME}.xcodeproj"
 # A known place for the build, so screenshots.sh can install the app the tests just built.
 DD=/tmp/gios-dd
 
+DEV=$(bash "$(dirname "${BASH_SOURCE[0]}")/sim.sh")
+# A fresh runner takes up to three minutes to boot the simulator: start now, while PRE_TEST and
+# the build run, so the tests only wait for whatever is left.
+[ "${XCTEST:-true}" = "false" ] || xcrun simctl bootstatus "$DEV" -b >/dev/null 2>&1 &
+
 if [ -n "${PRE_TEST:-}" ]; then
   echo "+ $PRE_TEST"
   bash -o pipefail -c "$PRE_TEST"
 fi
 
-DEV=$(bash "$(dirname "${BASH_SOURCE[0]}")/sim.sh")
 # shellcheck disable=SC2016  # $(inherited) is for xcodebuild, not the shell
 SLOW='$(inherited) -Xfrontend -warn-long-expression-type-checking=400 -Xfrontend -warn-long-function-bodies=1500'
 
