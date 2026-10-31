@@ -1,7 +1,7 @@
 name: iOS TestFlight
 
-# Reusable. Tests, then signs with fastlane match and uploads to TestFlight, so every push to
-# main is a build on the phone. Without the signing secrets it still tests and compiles, and
+# Reusable. Tests (unless Check already passed on these exact files), then signs with fastlane
+# match and uploads to TestFlight, so every push to main is a build on the phone. Without the signing secrets it still tests and compiles, and
 # says what is missing. The caller passes `secrets: inherit` and grants `actions: write`.
 # The build number is the caller's run number (+ BUILD_OFFSET in ci/app.env).
 on:
@@ -67,7 +67,24 @@ jobs:
         run: bash .gios/ios/ci/kit.sh select-xcode
       - name: Generate project
         run: bash .gios/ios/ci/kit.sh generate
+      # A merged PR usually leaves main with exactly the files its branch had, and Check already ran
+      # the tests on those. Same files (git tree) and a green Check: no second run. Anything else,
+      # including an API error, tests as before.
+      - name: Already tested by Check?
+        id: tested
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tree=$(git rev-parse 'HEAD^{tree}')
+          run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/check.yml/runs?status=success&per_page=50" \
+            -q "[.workflow_runs[] | select(.head_commit.tree_id == \"$tree\")][0].html_url // empty" 2>/dev/null || true)
+          if [ -n "$run" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "These exact files passed Check: $run"
+          fi
       - name: Unit tests
+        if: steps.tested.outputs.skip != 'true'
         timeout-minutes: 35
         run: bash .gios/ios/ci/kit.sh test
 

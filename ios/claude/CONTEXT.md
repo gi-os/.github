@@ -37,8 +37,8 @@ PRE_RELEASE, AUTO_RELEASE, THIRD_PARTY_CONTENT. Full table: `.gios/ios/README.md
 ## The pipeline (reusable workflows in gi-os/.github; scripts in `.gios/ios/ci/`)
 
 - **Check** (any branch, any PR): simulator unit tests, screenshots, and an unsigned Release device build.
-- **TestFlight** (push to main, `build.yml`): tests, then fastlane `ship`. Build number = run number +
-  BUILD_OFFSET, so `build.yml` keeps its name.
+- **TestFlight** (push to main, `build.yml`): tests (skipped when Check already passed on the exact same
+  files), then fastlane `ship`. Build number = run number + BUILD_OFFSET, so `build.yml` keeps its name.
 - **App Store** (by hand, `release.yml`): `release` (metadata, screenshots, attach or submit) or `attach`.
 - An app's own `ci/<step>.sh` overrides the kit's step; app-only lanes go below the import in
   `fastlane/Fastfile`.
